@@ -1,4 +1,4 @@
-import { createCliRenderer,Text } from "@opentui/core";
+import { Box, createCliRenderer,Text } from "@opentui/core";
 
 
 const renderer = await createCliRenderer({
@@ -7,8 +7,9 @@ const renderer = await createCliRenderer({
 
 
 renderer.root.add(
-  Text({
-      content: "Hello World",
-      fg: "#00FF00",
-  })
+  Box(
+    {borderStyle: "rounded", padding: 1, flexDirection: "column", gap: 1},
+    Text({content: "Hello, World!"}),
+    Text({content: "Press Ctrl+C to exit"}),
+  )
 )
