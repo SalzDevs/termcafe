@@ -1,6 +1,6 @@
+import fs from "node:fs"
 import { join } from "node:path"
 import { z } from "zod"
-import fs from "node:fs"
 
 const APP_CONFIG_DIR_NAME = "termcafe"
 const CONFIG_FILE_NAME = "config.json"
@@ -66,4 +66,11 @@ export async function saveConfig(config: TermcafeConfig): Promise<void> {
   const configPath = getConfigPath()
   const configData = TermcafeConfigSchema.parse(config)
   await Bun.write(configPath, JSON.stringify(configData, null, 2))
-} 
+}
+
+export function createDefaultConfig(widgetIds: string[]): TermcafeConfig {
+  return TermcafeConfigSchema.parse({
+    version: 1,
+    widgets: widgetIds,
+  })
+}
