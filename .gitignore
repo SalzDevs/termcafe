@@ -24,6 +24,9 @@ bun-debug.log*
 !.env.example
 !.env.sample
 
+# Local test data
+widgetsTest.json
+
 # Caches
 .cache/
 .parcel-cache/

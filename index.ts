@@ -1,20 +1,19 @@
-import { Box, createCliRenderer,Text } from "@opentui/core";
+async function getAvailableWidgets(configFilePath: string){
+  const fileExtension = configFilePath.split('.').pop();
 
+  if (fileExtension !== 'json') {
+    throw new Error('Unsupported file format. Please provide a JSON configuration file.');
+  }
+  
+  const file = Bun.file(configFilePath);
+  if (!file.exists()) {
+    throw new Error('Configuration file not found. Please provide a valid path.');
+  }
 
-function destroyMessage() {
-  console.log("Goodbye!")
+  const contents = await file.json();
+  console.log('File contents:', contents);
 }
 
-const renderer = await createCliRenderer({
-  exitOnCtrlC: true,
-  onDestroy: destroyMessage
-})
 
+getAvailableWidgets('widgetsTest.json')
 
-renderer.root.add(
-  Box(
-    {borderStyle: "rounded", padding: 1, flexDirection: "column", gap: 1},
-    Text({content: "Hello, World!"}),
-    Text({content: "Press Ctrl+C to exit"}),
-  )
-)
