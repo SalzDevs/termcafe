@@ -1,8 +1,13 @@
 import { Box, createCliRenderer,Text } from "@opentui/core";
 
 
+function destroyMessage() {
+  console.log("Goodbye!")
+}
+
 const renderer = await createCliRenderer({
   exitOnCtrlC: true,
+  onDestroy: destroyMessage
 })
 
 
