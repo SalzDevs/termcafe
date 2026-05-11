@@ -37,6 +37,13 @@ export function isDashboardState(state: AppState): state is DashboardState {
   return state.mode === "dashboard"
 }
 
+export function enterDashboard(state: SetupState): DashboardState {
+  return {
+    mode: "dashboard",
+    enabledWidgetIds: [...state.selectedWidgetIds],
+  }
+}
+
 export function moveSetupSelection(state: SetupState, direction: "up" | "down", availableWidgetIds: string[]): SetupState {
   const widgetCount = availableWidgetIds.length
 
