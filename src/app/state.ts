@@ -1,13 +1,12 @@
 import type { TermcafeConfig } from "./config"
 
-type SetupState = {
-
+export type SetupState = {
   mode: "setup"
   selectedWidgetIds: string[]
   setupSelectedIndex: number
 }
 
-type DashboardState = {
+export type DashboardState = {
   mode: "dashboard"
   enabledWidgetIds: string[]
 }
@@ -41,6 +40,14 @@ export function enterDashboard(state: SetupState): DashboardState {
   return {
     mode: "dashboard",
     enabledWidgetIds: [...state.selectedWidgetIds],
+  }
+}
+
+export function openSetup(state: DashboardState): SetupState {
+  return {
+    mode: "setup",
+    selectedWidgetIds: [...new Set(state.enabledWidgetIds)],
+    setupSelectedIndex: 0,
   }
 }
 
