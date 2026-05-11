@@ -56,3 +56,13 @@ export function moveSetupSelection(state: SetupState, direction: "up" | "down", 
   }
 }
 
+export function toggleSetupWidget(state: SetupState, widgetId: string): SetupState {
+  const isSelected = state.selectedWidgetIds.includes(widgetId)
+
+  return {
+    ...state,
+    selectedWidgetIds: isSelected
+      ? state.selectedWidgetIds.filter(id => id !== widgetId)
+      : [...state.selectedWidgetIds, widgetId],
+  }
+}
