@@ -1,5 +1,4 @@
-import { stdin as input, stdout as output } from "node:process"
-import { createInterface } from "node:readline/promises"
+import { Box, Text, createCliRenderer, type CliRenderer, type KeyEvent } from "@opentui/core"
 import { createDefaultConfig, getConfigPath, loadConfig, saveConfig } from "./src/app/config"
 import {
   createInitialState,
@@ -15,172 +14,312 @@ import {
 } from "./src/app/state"
 import { getAvailableWidgets, getWidgetById } from "./src/app/widgets"
 
-const rl = createInterface({ input, output })
-
-async function ask(question: string): Promise<string> {
-  return (await rl.question(question)).trim()
+type StatusMessage = {
+  type: "info" | "error"
+  text: string
 }
 
-function clearScreen(): void {
-  output.write("\x1Bc")
+const colors = {
+  background: "#1E1E2E",
+  text: "#CDD6F4",
+  muted: "#A6ADC8",
+  accent: "#89B4FA",
+  success: "#A6E3A1",
+  error: "#F38BA8",
+  selected: "#F9E2AF",
 }
 
-function renderSetup(state: SetupState): void {
+function clearRoot(renderer: CliRenderer): void {
+  const children = [...renderer.root.getChildren()]
+
+  for (const child of children) {
+    renderer.root.remove(child.id)
+  }
+}
+
+function renderSetupView(state: SetupState, statusMessage: StatusMessage | null, isSaving: boolean) {
   const availableWidgets = getAvailableWidgets()
 
-  clearScreen()
-  console.log("Termcafe • Setup")
-  console.log("Select widgets for your dashboard.\n")
-
-  availableWidgets.forEach((widget, index) => {
+  const widgetRows = availableWidgets.map((widget, index) => {
     const isFocused = index === state.setupSelectedIndex
     const isSelected = state.selectedWidgetIds.includes(widget.id)
 
-    const cursor = isFocused ? ">" : " "
-    const marker = isSelected ? "x" : " "
+    const cursor = isFocused ? "❯" : " "
+    const marker = isSelected ? "●" : "○"
 
-    console.log(`${cursor} [${marker}] ${index + 1}. ${widget.name} (${widget.id})`)
+    return Text({
+      content: `${cursor} ${marker} ${widget.name} (${widget.id})`,
+      fg: isFocused ? colors.selected : colors.text,
+    })
   })
 
-  console.log("\nCommands:")
-  console.log("  n / j  -> move down")
-  console.log("  p / k  -> move up")
-  console.log("  t      -> toggle focused widget")
-  console.log("  1..N   -> toggle widget by number")
-  console.log("  s      -> save + continue to dashboard")
-  console.log("  q      -> quit")
-  console.log(`\nConfig path: ${getConfigPath()}\n`)
-}
+  const footerLines = [
+    Text({
+      content: "Keys: ↑/↓ move  •  Space/Enter toggle  •  S save  •  Q quit",
+      fg: colors.muted,
+    }),
+    Text({
+      content: `Config: ${getConfigPath()}`,
+      fg: colors.muted,
+    }),
+  ]
 
-function renderDashboard(state: DashboardState): void {
-  clearScreen()
-  console.log("Termcafe • Dashboard\n")
-
-  if (state.enabledWidgetIds.length === 0) {
-    console.log("No widgets enabled yet.")
-  } else {
-    console.log("Enabled widgets:")
-
-    state.enabledWidgetIds.forEach((widgetId, index) => {
-      const widget = getWidgetById(widgetId)
-      const label = widget ? `${widget.name} (${widget.id})` : `${widgetId} (unknown)`
-      console.log(`  ${index + 1}. ${label}`)
-    })
+  if (statusMessage) {
+    footerLines.push(
+      Text({
+        content: statusMessage.text,
+        fg: statusMessage.type === "error" ? colors.error : colors.success,
+      }),
+    )
   }
 
-  console.log("\nCommands:")
-  console.log("  e      -> edit widgets (open setup)")
-  console.log("  q      -> quit")
-  console.log(`\nConfig path: ${getConfigPath()}\n`)
+  if (isSaving) {
+    footerLines.push(Text({ content: "Saving configuration...", fg: colors.selected }))
+  }
+
+  return Box(
+    {
+      width: "100%",
+      height: "100%",
+      flexDirection: "column",
+      padding: 1,
+      gap: 1,
+      backgroundColor: colors.background,
+    },
+    Box(
+      {
+        border: true,
+        borderStyle: "rounded",
+        borderColor: colors.accent,
+        padding: 1,
+        flexDirection: "column",
+      },
+      Text({ content: "Termcafe • Setup", fg: colors.accent }),
+      Text({ content: "Choose widgets for your dashboard", fg: colors.muted }),
+    ),
+    Box(
+      {
+        flexGrow: 1,
+        border: true,
+        borderStyle: "rounded",
+        padding: 1,
+        flexDirection: "column",
+      },
+      ...widgetRows,
+    ),
+    Box(
+      {
+        border: true,
+        borderStyle: "rounded",
+        padding: 1,
+        flexDirection: "column",
+        gap: 0,
+      },
+      ...footerLines,
+    ),
+  )
 }
 
-async function runSetup(state: SetupState): Promise<AppState | null> {
-  const availableWidgetIds = getAvailableWidgets().map((widget) => widget.id)
+function renderDashboardView(state: DashboardState, statusMessage: StatusMessage | null) {
+  const widgetRows =
+    state.enabledWidgetIds.length > 0
+      ? state.enabledWidgetIds.map((widgetId, index) => {
+          const widget = getWidgetById(widgetId)
+          const label = widget ? `${widget.name} (${widget.id})` : `${widgetId} (unknown widget)`
 
-  while (true) {
-    renderSetup(state)
+          return Text({
+            content: `${index + 1}. ${label}`,
+            fg: colors.text,
+          })
+        })
+      : [Text({ content: "No widgets enabled yet.", fg: colors.muted })]
 
-    const command = (await ask("setup> ")).toLowerCase()
+  const footerLines = [
+    Text({
+      content: "Keys: E edit widgets  •  Q quit",
+      fg: colors.muted,
+    }),
+    Text({
+      content: `Config: ${getConfigPath()}`,
+      fg: colors.muted,
+    }),
+  ]
 
-    if (command === "" && input.readableEnded) {
-      return null
-    }
-
-    if (command === "q") {
-      return null
-    }
-
-    if (command === "n" || command === "j" || command === "down") {
-      state = moveSetupSelection(state, "down", availableWidgetIds)
-      continue
-    }
-
-    if (command === "p" || command === "k" || command === "up") {
-      state = moveSetupSelection(state, "up", availableWidgetIds)
-      continue
-    }
-
-    if (command === "t" || command === "toggle") {
-      const focusedWidgetId = availableWidgetIds[state.setupSelectedIndex]
-
-      if (focusedWidgetId) {
-        state = toggleSetupWidget(state, focusedWidgetId)
-      }
-
-      continue
-    }
-
-    if (command === "s" || command === "save") {
-      const config = createDefaultConfig(state.selectedWidgetIds)
-      await saveConfig(config)
-      return enterDashboard(state)
-    }
-
-    const oneBasedIndex = Number(command)
-
-    if (Number.isInteger(oneBasedIndex)) {
-      const zeroBasedIndex = oneBasedIndex - 1
-      const selectedWidgetId = availableWidgetIds[zeroBasedIndex]
-
-      if (selectedWidgetId) {
-        state = {
-          ...state,
-          setupSelectedIndex: zeroBasedIndex,
-        }
-        state = toggleSetupWidget(state, selectedWidgetId)
-      }
-
-      continue
-    }
+  if (statusMessage) {
+    footerLines.push(
+      Text({
+        content: statusMessage.text,
+        fg: statusMessage.type === "error" ? colors.error : colors.success,
+      }),
+    )
   }
+
+  return Box(
+    {
+      width: "100%",
+      height: "100%",
+      flexDirection: "column",
+      padding: 1,
+      gap: 1,
+      backgroundColor: colors.background,
+    },
+    Box(
+      {
+        border: true,
+        borderStyle: "rounded",
+        borderColor: colors.accent,
+        padding: 1,
+      },
+      Text({ content: "Termcafe • Dashboard", fg: colors.accent }),
+    ),
+    Box(
+      {
+        flexGrow: 1,
+        border: true,
+        borderStyle: "rounded",
+        padding: 1,
+        flexDirection: "column",
+      },
+      ...widgetRows,
+    ),
+    Box(
+      {
+        border: true,
+        borderStyle: "rounded",
+        padding: 1,
+        flexDirection: "column",
+        gap: 0,
+      },
+      ...footerLines,
+    ),
+  )
 }
 
-async function runDashboard(state: DashboardState): Promise<AppState | null> {
-  while (true) {
-    renderDashboard(state)
-
-    const command = (await ask("dashboard> ")).toLowerCase()
-
-    if (command === "" && input.readableEnded) {
-      return null
-    }
-
-    if (command === "q" || command === "quit") {
-      return null
-    }
-
-    if (command === "e" || command === "edit") {
-      return openSetup(state)
-    }
-  }
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 async function runApp(): Promise<void> {
   const config = await loadConfig()
-  let state: AppState = createInitialState(config)
+  const availableWidgetIds = getAvailableWidgets().map((widget) => widget.id)
 
-  while (true) {
-    if (isSetupState(state)) {
-      const nextState = await runSetup(state)
+  let appState: AppState = createInitialState(config)
+  let statusMessage: StatusMessage | null = config
+    ? { type: "info", text: "Press E to edit your dashboard widgets." }
+    : { type: "info", text: "No config found. Select widgets and press S to save." }
+  let isSaving = false
 
-      if (nextState === null) {
-        break
-      }
+  const renderer = await createCliRenderer({
+    exitOnCtrlC: true,
+    screenMode: "alternate-screen",
+    targetFps: 30,
+  })
 
-      state = nextState
-      continue
+  const renderAppView = (): void => {
+    if (renderer.isDestroyed) {
+      return
     }
 
-    if (isDashboardState(state)) {
-      const nextState = await runDashboard(state)
+    clearRoot(renderer)
 
-      if (nextState === null) {
-        break
-      }
+    const view = isSetupState(appState)
+      ? renderSetupView(appState, statusMessage, isSaving)
+      : renderDashboardView(appState, statusMessage)
 
-      state = nextState
+    renderer.root.add(view)
+  }
+
+  const shutdown = (): void => {
+    if (!renderer.isDestroyed) {
+      renderer.destroy()
     }
   }
+
+  const onKeyPress = async (key: KeyEvent): Promise<void> => {
+    const keyName = key.name?.toLowerCase()
+
+    if (!keyName) {
+      return
+    }
+
+    if (keyName === "q") {
+      shutdown()
+      return
+    }
+
+    if (isSaving) {
+      return
+    }
+
+    if (isSetupState(appState)) {
+      if (keyName === "up" || keyName === "k") {
+        appState = moveSetupSelection(appState, "up", availableWidgetIds)
+        renderAppView()
+        return
+      }
+
+      if (keyName === "down" || keyName === "j") {
+        appState = moveSetupSelection(appState, "down", availableWidgetIds)
+        renderAppView()
+        return
+      }
+
+      if (keyName === "space" || keyName === "return") {
+        const focusedWidgetId = availableWidgetIds[appState.setupSelectedIndex]
+
+        if (focusedWidgetId) {
+          appState = toggleSetupWidget(appState, focusedWidgetId)
+          statusMessage = { type: "info", text: `Toggled widget: ${focusedWidgetId}` }
+          renderAppView()
+        }
+
+        return
+      }
+
+      if (keyName === "s") {
+        const setupState = appState
+
+        isSaving = true
+        statusMessage = { type: "info", text: "Saving configuration..." }
+        renderAppView()
+
+        try {
+          const nextConfig = createDefaultConfig(setupState.selectedWidgetIds)
+          await saveConfig(nextConfig)
+          appState = enterDashboard(setupState)
+          statusMessage = { type: "info", text: "Configuration saved." }
+        } catch (error) {
+          statusMessage = {
+            type: "error",
+            text: `Failed to save config: ${getErrorMessage(error)}`,
+          }
+        } finally {
+          isSaving = false
+          renderAppView()
+        }
+      }
+
+      return
+    }
+
+    if (isDashboardState(appState) && keyName === "e") {
+      appState = openSetup(appState)
+      statusMessage = { type: "info", text: "Editing setup. Press S to save changes." }
+      renderAppView()
+    }
+  }
+
+  renderer.keyInput.on("keypress", (key: KeyEvent) => {
+    void onKeyPress(key)
+  })
+
+  renderAppView()
+
+  await new Promise<void>((resolve) => {
+    renderer.on("destroy", () => {
+      resolve()
+    })
+  })
 }
 
 try {
@@ -188,6 +327,4 @@ try {
 } catch (error) {
   console.error("Termcafe failed:", error)
   process.exitCode = 1
-} finally {
-  rl.close()
 }
